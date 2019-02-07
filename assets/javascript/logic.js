@@ -14,12 +14,12 @@
 
 $(document).ready(function () {
 
-    let player;
+    let player, opponentNum;
     let userName, opponentName;
     let gameKey;
     let userPlay, opponentPlay;
     let gameRef;
-    let pOneToken, pTwoToken;
+
     const tokensArr = $(".tokens");
 
     $("#playButton").on("click", function(event) {
@@ -30,61 +30,68 @@ $(document).ready(function () {
     });
 
     function addTokenOnClick() {
-        $(".tokens").on("click", function(event) {
+        $(".tokens").on("click", async function(event) {
 
             tokensArr.hide();
-            updateTokenPlayed($(this)[0].id);
+
+            await updateTokenPlayed($(this)[0].id);
+
+            console.log(opponentPlay, userPlay);
+
+            if(opponentPlay && userPlay) {
+                gameLogic(userPlay, opponentPlay);
+                setTimeout(initializeNewMatch, 2500);
+            }
         });
     }   
 
-    function updateTokenPlayed(tokenID) {
-        gameRef.transaction(function(gameObject) {
-            if(gameObject === null) {
-                return null
-            }
+    async function updateTokenPlayed(tokenID) {
+        return new Promise(async function(resolve){
+            let updateComplete = await  gameRef.transaction(function(gameObject) {
+                if(gameObject === null) {
+                    return null
+                }
 
-            else {
-                gameObject["p" + player + "Token"] = tokenID;
-                return gameObject;
-            }
-        })
-    }
-
-    function initializeNewMatch() {
-        $("#gameSpace").empty();
-        tokensArr.show();
+                else {
+                    gameObject["p" + player + "Token"] = tokenID;
+                    console.log("returning from token");
+                    return gameObject;
+                }
+            });
+            resolve(updateComplete);
+        });
     }
 
     function newPlayer() {
 
-        gameKey = database.ref("/games").push({
+        gameKey = database.ref("/games").push( {
             initialized: false,
             playerOne: "Waiting for Player One",
             playerTwo: "Waiting for Player Two",
         }).key;
 
         database.ref("/gameKeys").transaction( function(gameList) {
-        // database.ref("/needsOpponent").once('value').then(function(snapshot) {
-            if(gameList) {
 
+            if(gameList) {
                 
                 database.ref('/games/' + gameKey).set({});
                 
                 let gameKeyName = Object.keys(gameList)[Object.keys(gameList).length-1];
                 gameKey = gameList[gameKeyName];
                 gameList[gameKeyName] = null;
-                gameRef = database.ref("/games/" +gameKey);
                 player = "Two";
 
                 return gameList;
             }
 
             else {
+
                 player = "One";
-                gameRef = database.ref("/games/" + gameKey);
+
                 return {
                     ["gameID" + userName]: gameKey,
                 };
+
             }
 
         }, function(error, committed, snapshot) {
@@ -101,6 +108,8 @@ $(document).ready(function () {
 
     function loadPlayer(playerNumber, gameKey) {
 
+        gameRef = database.ref("/games/" +gameKey);
+
         addTokenOnClick();
 
         gameRef.transaction( function(gameObject) {
@@ -109,8 +118,8 @@ $(document).ready(function () {
                 gameObject["player" + playerNumber] = userName;
                 gameObject["p" + playerNumber + "Token"]= false;
                 gameObject["p" + playerNumber + "Wins"] = 0;
-                gameObject.gameID = gameKey;
                 gameObject.initialized = true;
+                gameObject.gameComplete = false;
                 return gameObject;
             }
             else
@@ -123,7 +132,7 @@ $(document).ready(function () {
 
     function displayListener(user) {
 
-        let opponentNum = (user === "One" ? "Two" : "One");
+        opponentNum = (user === "One" ? "Two" : "One");
 
         gameRef.child("/player" + user).on("value", function(userSnap) {
             $("#card-pOne").text(userSnap.val());
@@ -145,35 +154,143 @@ $(document).ready(function () {
         });
 
         gameRef.child("/p" + user + "Token").on("value", function(tokenSnap){
-            if(tokenSnap.val()) {
-                userPlay = $("#" + tokenSnap.val()).clone();
-                $("#gameSpace").prepend(userPlay.show());
-                if(opponentPlay) {
-                    showOpponentPlay();
-                    gameLogic(userPlay.id, opponentPlay.id);
-                }
+            
+            userPlay = tokenSnap.val();
+            $("#user-play #" + userPlay).removeAttr("hidden");
+            if(opponentPlay) {
+                showOpponentPlay();
             }
+            
         });
 
         gameRef.child("/p" + opponentNum + "Token").on("value", function(oppTokenSnap){
-            if(oppTokenSnap.val())
-                opponentPlay = $("#" + oppTokenSnap.val()).clone();
+
+            console.log(oppTokenSnap.val());
+            opponentPlay = oppTokenSnap.val();
             if(userPlay) {
                 showOpponentPlay();
-                gameLogic(userPlay.attr('id'), opponentPlay.attr('id'));
             }
+        
         });
 
+        gameRef.child("/gameComplete").on("value", function(completeSnap) {
+            if(completeSnap.val()) {
+
+                displayResult(completeSnap.val());
+                setTimeout(resetScreen, 2500);
+            }
+        })
+        
     }
 
     function showOpponentPlay() {
-        console.log("userPlay: " + userPlay +" typeof " + typeof userPlay, "opponentPlay: " + opponentPlay + " typeof " + typeof opponentPlay);
         if(userPlay && opponentPlay)
-            $("#gameSpace").prepend(opponentPlay.show());
+            $("#opponent-play #" + opponentPlay).removeAttr("hidden");
     }
 
     function gameLogic(userRPS, opponentRPS) {
-        console.log(userRPS, opponentRPS);
+        switch(userRPS) {
+            case "rock":
+                if (opponentRPS === "rock") {
+                updateGameComplete("No one");
+                }
+                else if (opponentRPS === "scissors") {
+                updateGameComplete($("#card-pOne").text());
+                addWinToScore(player);
+                }
+                else if (opponentRPS === "paper") {
+                updateGameComplete($("#card-pTwo").text());
+                addWinToScore(opponentNum);
+                }
+                break;
+            case "paper":
+                if (opponentRPS === "rock") {
+                updateGameComplete($("#card-pOne").text());
+                addWinToScore(player);
+                }
+                else if (opponentRPS === "scissors") {
+                updateGameComplete($("#card-pTwo").text());
+                addWinToScore(opponentNum);
+                }
+                else if (opponentRPS === "paper") {
+                updateGameComplete("No one");
+                }
+                break;
+            case "scissors":
+                if (opponentRPS === "rock") {
+                updateGameComplete($("#card-pTwo").text());
+                addWinToScore(opponentNum);
+                }
+                else if (opponentRPS === "scissors") {
+                updateGameComplete("No one");
+                }
+                else if (opponentRPS === "paper") {
+                updateGameComplete( $("#card-pOne").text() );
+                addWinToScore(player);
+                }
+                break;
+        }
+    }
+
+    function updateGameComplete(matchResult) {
+
+        gameRef.transaction(function(game){
+            if(game === null) {
+                return game;
+            }
+
+            else {
+                game.gameComplete = matchResult;
+                return game;
+            }
+        });
+    }
+
+    function addWinToScore(winner) {
+
+        gameRef.transaction(function(game) {
+
+            if(game === null) {
+                return null;
+            }
+
+            else {
+                console.log(game);
+                game["p" + winner + "Wins"]++;
+                return game;
+            }
+
+        });
+
     }
     
+    function displayResult(winner) {
+
+        $("#tokenTray").append($("<h4>").text(winner + " Wins!").attr('id', "winTag").addClass("text-center w-100"));
+
+    }
+
+    function resetScreen() {
+        $(".tokens-played").attr("hidden", "true");
+        
+        $("#winTag").empty().remove();
+        tokensArr.show();
+    }
+    
+    function initializeNewMatch() {
+        gameRef.transaction(function(game) {
+            if(game === null) {
+                return game;
+            }
+
+            else {
+                game["p" + opponentNum + "Token"] = false;
+                game["p" + player + "Token"] = false;
+                game["gameComplete"] = false;
+                return game;
+            }
+        });
+
+
+    }
 });

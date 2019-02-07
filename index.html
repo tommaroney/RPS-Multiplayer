@@ -39,7 +39,20 @@
             <div class="col-md-8 h-75 jumbotron align-self-center shadow-lg align-items-end p-0">
                 <!-- <div class="align-self-center">center</div> -->
                 <div class="row h-75 w-100 p-0 m-0">
-                    <div class="d-flex justify-content-center align-content-center w-100 h-100" id="gameSpace"></div>
+                    <div class="col-6">
+                        <div class="d-flex h-100 w-75 m-auto justify-contents-between" id="user-play">
+                            <img src="assets/images/paper.png" class="tokens-played h-100 m-auto" id="paper" hidden="true">
+                            <img src="assets/images/rock.png" class="tokens-played h-100 m-auto" id="rock" hidden="true">
+                            <img src="assets/images/scissors.png" class="tokens-played h-100 m-auto" id="scissors" hidden="true">
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="d-flex h-100 w-75 m-auto justify-contents-between" id="opponent-play">
+                            <img src="assets/images/paper.png" class="tokens-played h-100 m-auto" id="paper" hidden="true">
+                            <img src="assets/images/rock.png" class="tokens-played h-100 m-auto" id="rock" hidden="true">
+                            <img src="assets/images/scissors.png" class="tokens-played h-100 m-auto" id="scissors" hidden="true">
+                        </div>
+                    </div>
                 </div>
                 <div class="row h-25 w-100 p-0 m-0">
                     <div class="d-flex h-100 w-75 m-auto justify-contents-between" id="tokenTray">
