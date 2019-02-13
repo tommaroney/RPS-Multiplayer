@@ -17,8 +17,26 @@ $(document).ready(function () {
     let player, opponentNum;
     let userName, opponentName;
     let gameKey;
+    let gameTimer, responseTimer;
+    let gameInterval, responseInterval;
     let userPlay, opponentPlay;
     let gameRef;
+    let noResponseModal = newModal('#no-response', "#nr-btn");
+    let continueModal = newModal("#continue-playing");
+    let opponentLeftModal = newModal("#opponent-left", "#ol-btn");
+
+    $("#cp-btn-yes").on("click", async function(event){
+        await continueModal.modal("hide");
+        $("#cp-btn-yes").off("click");
+        gameRef.transaction(function(game) {
+            if(game === null)
+                return game;
+            else {
+                game["p" + player + "ResponseRequested"] = false;
+                return game;
+            }
+        }, console.log, false);
+    });
 
     const tokensArr = $(".tokens");
 
@@ -36,8 +54,6 @@ $(document).ready(function () {
 
             await updateTokenPlayed($(this)[0].id);
 
-            console.log(opponentPlay, userPlay);
-
             if(opponentPlay && userPlay) {
                 gameLogic(userPlay, opponentPlay);
                 setTimeout(initializeNewMatch, 2500);
@@ -46,7 +62,9 @@ $(document).ready(function () {
     }   
 
     async function updateTokenPlayed(tokenID) {
+
         return new Promise(async function(resolve){
+
             let updateComplete = await  gameRef.transaction(function(gameObject) {
                 if(gameObject === null) {
                     return null
@@ -54,10 +72,9 @@ $(document).ready(function () {
 
                 else {
                     gameObject["p" + player + "Token"] = tokenID;
-                    console.log("returning from token");
                     return gameObject;
                 }
-            });
+            }, console.log, false);
             resolve(updateComplete);
         });
     }
@@ -65,7 +82,6 @@ $(document).ready(function () {
     function newPlayer() {
 
         gameKey = database.ref("/games").push( {
-            initialized: false,
             playerOne: "Waiting for Player One",
             playerTwo: "Waiting for Player Two",
         }).key;
@@ -95,20 +111,20 @@ $(document).ready(function () {
             }
 
         }, function(error, committed, snapshot) {
-
-            console.log(error);
-            console.log(committed);
-            console.log(snapshot.val())
             if(committed) {
                 loadPlayer(player, gameKey);
             }
 
-        });
+        }, false);
     }
 
     function loadPlayer(playerNumber, gameKey) {
 
         gameRef = database.ref("/games/" +gameKey);
+
+        gameTimer = newTimer(checkOpponentEngagement, 20000);
+
+        responseTimer = newTimer(newGamePrompt, 10000, noResponseModal, "#nr-btn-yes");
 
         addTokenOnClick();
 
@@ -116,31 +132,62 @@ $(document).ready(function () {
 
             if(gameObject) {
                 gameObject["player" + playerNumber] = userName;
-                gameObject["p" + playerNumber + "Token"]= false;
+                gameObject["p" + playerNumber + "Token"] = false;
+                gameObject["p" + playerNumber + "ResponseRequested"] = false;
                 gameObject["p" + playerNumber + "Wins"] = 0;
-                gameObject.initialized = true;
                 gameObject.gameComplete = false;
                 return gameObject;
             }
             else
                 return gameObject;
-        });
+        }, console.log, false);
 
         
-        displayListener(playerNumber);
+        registerGameListeners(playerNumber);
     }
 
-    function displayListener(user) {
+    function registerGameListeners(user) {
+
+        console.log("One listener");
 
         opponentNum = (user === "One" ? "Two" : "One");
 
+        gameRef.child("/p" + player + "ResponseRequested").on("value", function(engagedSnap){
+            if(engagedSnap.val()) {
+
+                confirmContinue();
+
+            }
+        });
+
+
+        gameRef.child("/p" + opponentNum + "ResponseRequested").on("value", function(opponentQuerySnap){
+
+            console.log(opponentQuerySnap.val(), responseInterval);
+            if(opponentQuerySnap.val() === false) {
+                gameInterval = gameTimer.newCountdown(gameInterval);
+            }
+            else if(opponentQuerySnap.val() !== false && opponentQuerySnap.val() !== null) {
+                console.log("here");
+                if(!responseInterval)
+                    responseInterval = responseTimer.newCountdown(responseInterval);
+            }
+        });
+
         gameRef.child("/player" + user).on("value", function(userSnap) {
+
+            gameRef.once("value", function(snapshot){
+                console.log(snapshot.val());
+                if(snapshot.val() === null) {
+                    newGamePrompt(opponentLeftModal);
+                }
+            });
+
             $("#card-pOne").text(userSnap.val());
         });
 
-        console.log((user === "One") ? "Two" : "One");
-
         gameRef.child("/player" + opponentNum).on("value", function(opponentSnap) {
+
             opponentName = opponentSnap.val();
             $("#card-pTwo").text(opponentSnap.val());
         });
@@ -165,8 +212,9 @@ $(document).ready(function () {
 
         gameRef.child("/p" + opponentNum + "Token").on("value", function(oppTokenSnap){
 
-            console.log(oppTokenSnap.val());
             opponentPlay = oppTokenSnap.val();
+            if(opponentPlay)
+                gameTimer.stop(gameInterval);
             if(userPlay) {
                 showOpponentPlay();
             }
@@ -177,10 +225,55 @@ $(document).ready(function () {
             if(completeSnap.val()) {
 
                 displayResult(completeSnap.val());
-                setTimeout(resetScreen, 2500);
+                setTimeout(newCountdownScreen, 2500);
+
             }
-        })
+        });
         
+    }
+
+    function newModal(modalName, buttonName) {
+        if(buttonName) {
+        $(buttonName + "-yes").on("click", async function(event) {
+            gameRef.child("/player" + player).off("value");
+            await continueModal.modal("hide");
+            await opponentLeftModal.modal("hide");
+            await noResponseModal.modal("hide");
+            responseTimer.stop(responseInterval);
+            responseInterval = undefined;
+            gameTimer.stop(gameInterval);
+            gameInterval = undefined;
+            $("#nr-btn-no").off("click");
+            $("#ol-btn-no").off("click");
+
+            await gameRef.once("value", function(gameSnap) {
+                if(gameSnap.val() !== null) {
+                    let gameObjectKeys = Object.keys(gameSnap.val());
+                    gameObjectKeys.forEach(function(pieces) {
+                        gameRef.child("/" + gameSnap[pieces]).off();('value');
+                    });
+                }
+
+            });
+
+            gameRef.set({
+                game: null,
+            });
+            
+            newPlayer();
+            newCountdownScreen();
+        });
+
+        $(buttonName + "-no").on("click", function(event) {
+            modalID.modal("hide");
+        });
+
+    }
+
+        return $(modalName).modal({
+            keyboard: false,
+            backdrop: "static",
+        }).modal("hide");;
     }
 
     function showOpponentPlay() {
@@ -232,6 +325,71 @@ $(document).ready(function () {
         }
     }
 
+    function newTimer (endTimerCall, duration, cbArg1, cbArg2) {
+    
+        return {
+
+            timeSet: duration,
+            cbArg1: cbArg1,
+            cbArg2: cbArg2,
+            endTimerCall: endTimerCall,
+
+            stop: function(intervalName) {            
+                clearInterval(intervalName);
+            },
+
+            start: function() {        
+                return setInterval(endTimerCall, this.timeSet);
+            },
+
+            newCountdown: function(intervalName) {
+                let endTimerCall = this.endTimerCall;
+                let cbArg1 = this.cbArg1;
+                let cbArg2 = this.cbArg2;
+                let timeSet = this.timeSet;
+                if(intervalName)
+                    clearInterval(intervalName);
+                if(cbArg1 && cbArg2)
+                    return setInterval(function() {
+                        endTimerCall(cbArg1, cbArg2)
+                    }, timeSet);
+                else
+                    return setInterval(endTimerCall, timeSet);
+            }
+
+        }
+
+    }
+
+    function checkOpponentEngagement() {
+
+        gameTimer.stop(gameInterval);
+
+        gameRef.transaction(function(game) {
+
+            if(game === null) {
+                return game;
+            }
+
+            else {
+                if((game.pTwoWins != null) && game.pTwoResponseRequested === false)
+                    game["p" + opponentNum + "ResponseRequested"] = true;
+                return game;
+            }
+        }, console.log, false);
+    }
+
+    function newGamePrompt(modalID) {
+
+        modalID.modal("show");
+        
+    }
+
+    async function confirmContinue() {
+
+        await continueModal.modal("show");
+    }
+
     function updateGameComplete(matchResult) {
 
         gameRef.transaction(function(game){
@@ -243,7 +401,7 @@ $(document).ready(function () {
                 game.gameComplete = matchResult;
                 return game;
             }
-        });
+        }, console.log, false);
     }
 
     function addWinToScore(winner) {
@@ -255,12 +413,11 @@ $(document).ready(function () {
             }
 
             else {
-                console.log(game);
                 game["p" + winner + "Wins"]++;
                 return game;
             }
 
-        });
+        }, console.log, false);
 
     }
     
@@ -270,14 +427,17 @@ $(document).ready(function () {
 
     }
 
-    function resetScreen() {
+    function newCountdownScreen() {
         $(".tokens-played").attr("hidden", "true");
         
         $("#winTag").empty().remove();
         tokensArr.show();
+        
+        gameInterval = gameTimer.newCountdown(gameInterval);
     }
     
     function initializeNewMatch() {
+
         gameRef.transaction(function(game) {
             if(game === null) {
                 return game;
@@ -289,7 +449,7 @@ $(document).ready(function () {
                 game["gameComplete"] = false;
                 return game;
             }
-        });
+        }, console.log, false);
 
 
     }

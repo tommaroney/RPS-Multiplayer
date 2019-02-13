@@ -73,6 +73,48 @@
 
     </section>
 
+    <div class="modal" tabindex="-1" role="dialog" id="continue-playing">
+        <div class="modal-dialog" role="document">
+          <div class="modal-content">
+            <div class="modal-body">
+              <p>Still playing?</p>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-primary" id="cp-btn-yes">Yes</button>
+              <button type="button" class="btn btn-secondary" data-dismiss="modal" id="cp-btn-no">No</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal" tabindex="-1" role="dialog" id="no-response">
+        <div class="modal-dialog" role="document">
+          <div class="modal-content">
+            <div class="modal-body">
+              <p>Your opponent is not responding.  Would you like to find a new opponent?</p>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-primary" id="nr-btn-yes">Yes</button>
+              <button type="button" class="btn btn-secondary" data-dismiss="modal" id="nr-btn-no">No</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal" tabindex="-1" role="dialog" id="opponent-left">
+        <div class="modal-dialog" role="document">
+          <div class="modal-content">
+            <div class="modal-body">
+              <p>Opponent left, would you like to find a new opponent?</p>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-primary" id="ol-btn-yes">Yes</button>
+              <button type="button" class="btn btn-secondary" data-dismiss="modal" id="ol-btn-no">No</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
 </body>
 
 <script src="assets/javascript/logic.js" type="text/javascript"></script>
