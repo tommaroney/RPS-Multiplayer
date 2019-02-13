@@ -41,10 +41,15 @@ $(document).ready(function () {
     const tokensArr = $(".tokens");
 
     $("#playButton").on("click", function(event) {
+        event.preventDefault();
         userName = $("#nameTextBar").val().trim();
-        $("#registration").remove();
-        $("#mainContainer").removeAttr("hidden");
-        newPlayer();
+        if(userName.length > 1) {
+            $("#registration").remove();
+            $("#mainContainer").removeAttr("hidden");
+            newPlayer();
+        }
+        else
+            $("#nameTextBar").attr("placeholder", "Enter a name...");
     });
 
     function addTokenOnClick() {
